@@ -8,6 +8,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.ObjectInput;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutput;
@@ -65,7 +66,10 @@ public class ConnectionThread extends Thread{
     Socket socket;
     Object outputStreamLock = new Object();
     public final Object synchronizeBytes = new Object();
-    private long lastSeenTimeStamp = -1;
+
+    public volatile long lastSeenTimeStamp = -1;
+    private long lastPeerStatusCheck = -1;
+
     ReentrantLock lastSeenStampLock;
     public String[] device_ip_adresses = {
             "",
@@ -139,7 +143,7 @@ public class ConnectionThread extends Thread{
 
     @Override
     public void run() {
-     //   lock = new ReentrantLock();
+        //   lock = new ReentrantLock();
 
 //        lock.lock();
 //        try {
@@ -154,26 +158,42 @@ public class ConnectionThread extends Thread{
         peerIsAlive = true;
         int sinkID = 7;
         int myID = mainActivity.DEVICE_ID;
+        long interruptTimeStamp = -1;
+
         try {
-            debug("Started the thread",DEBUG);
+            debug("Started the thread", DEBUG);
             objectOutputStream = new ObjectOutputStream(outputStream);
-            debug("Made the object outputstream",DEBUG);
-            objectOutputStream.flush();
-            startHeartBeat();
+//            objectOutputStream.flush();
             objectInputStream = new ObjectInputStream(inputStream);
-            debug("Made the object inputstream",DEBUG);
-            lastSeenTimeStamp = System.currentTimeMillis();
-            while(threadIsAlive) {
+        }
+        catch(IOException e) {
+            threadIsAlive = false;
+            cancel();
+        }
+
+        lastSeenTimeStamp = System.currentTimeMillis();
 
 
+//            debug("Started the thread",DEBUG);
+//            objectOutputStream = new ObjectOutputStream(outputStream);
+//            debug("Made the object outputstream",DEBUG);
+//            objectOutputStream.flush();
+////            startHeartBeat();
+//            objectInputStream = new ObjectInputStream(inputStream);
+//            debug("Made the object inputstream",DEBUG);
+//
+
+        while(threadIsAlive) {
+
+            try {
                 Packet incomingPacket = (Packet) objectInputStream.readObject();
-                peerIsAlive = true;
+//                peerIsAlive = true;
                 lastSeenTimeStamp = System.currentTimeMillis();
 //                Packet incomingPacket = serialize(inputStream);
 //                debug(incomingPacket.toString(), DEBUG);
-                if ( ( (mainActivity.received_bytes > mainActivity.sent_bytes) ||
+                if (((mainActivity.received_bytes > mainActivity.sent_bytes) ||
                         (mainActivity.experimentRunning && myID == 9))
-                        && myID > sinkID && peerIsAlive && !sendingToPeer
+                        && myID > sinkID && !sendingToPeer
                         && (deviceID + 1) == myID) {
                     sendStream(myID - 1);
                 }
@@ -186,7 +206,6 @@ public class ConnectionThread extends Thread{
 //                    log(mainLogFile, "Bytes in socket " + inputStream.available());
 
 
-
                 if (incomingPacket.getType() != Packet.HEARTBEAT) {
                     log(packetLogFile, device_ip_adresses[deviceID - 1] + "\t" +
                             device_ip_adresses[myID - 1] +
@@ -194,9 +213,9 @@ public class ConnectionThread extends Thread{
                             "\t" + sizeOf(incomingPacket) + "\t" + incomingPacket.getType() +
                             "\t" + incomingPacket.getExperimentID());
 
-                    if(incomingPacket.getExperimentID() != mainActivity.experiment_id){
+                    if (incomingPacket.getExperimentID() != mainActivity.experiment_id) {
                         mainActivity.experiment_id = incomingPacket.getExperimentID();
-                        log(mainLogFile, "Starting experiment "+ mainActivity.experiment_id+" sent "+mainActivity.sent_bytes+" received "+mainActivity.received_bytes+" bytes");
+                        log(mainLogFile, "Starting experiment " + mainActivity.experiment_id + " sent " + mainActivity.sent_bytes + " received " + mainActivity.received_bytes + " bytes");
                         mainActivity.sent_bytes = 0;
                         mainActivity.received_bytes = 0;
 //                        }
@@ -236,15 +255,30 @@ public class ConnectionThread extends Thread{
 //                        }
 //                    }
 //                }
+            } catch(InterruptedIOException e){
+                debug(e.toString(), WARN);
+
+                long currentTime = System.currentTimeMillis();
+                debug("Interrupted after " + (currentTime - interruptTimeStamp) + " milliseconds", DEBUG);
+                interruptTimeStamp = currentTime;
+
+                if (((mainActivity.received_bytes > mainActivity.sent_bytes) ||
+                        (mainActivity.experimentRunning && myID == 9))
+                        && myID > sinkID && !sendingToPeer
+                        && (deviceID + 1) == myID) {
+                    sendStream(myID - 1);
+                }
+
+                checkPeer();
             }
-        } catch (IOException e){
-            debug(e.toString(), WARN);
-            e.printStackTrace();
-            cancel();
-        }
-        catch (ClassNotFoundException e) {
-            debug(e.toString(), WARN);
-            e.printStackTrace();
+            catch (IOException e) {
+                debug(e.toString(), WARN);
+                e.printStackTrace();
+                cancel();
+            } catch (ClassNotFoundException e) {
+                debug(e.toString(), WARN);
+                e.printStackTrace();
+            }
         }
 
 
@@ -265,6 +299,22 @@ public class ConnectionThread extends Thread{
 //    }
 
 
+    public void checkPeer(){
+        int delay_between_checks = 2000; //2 secs
+        long currentTime = System.currentTimeMillis();
+        if(lastPeerStatusCheck == -1)
+            lastPeerStatusCheck = currentTime;
+        if((currentTime - lastPeerStatusCheck) >= delay_between_checks){
+            //Haven't seen the peer for 2 Seconds
+            if((currentTime - lastSeenTimeStamp) >= 2000){
+                debug("Peer "+deviceID+" is dead", DEBUG);
+                log(mainLogFile, "Peer "+deviceID+" is dead");
+                cancel();
+            }else{
+                debug("Peer "+deviceID+" is alive", DEBUG);
+            }
+        }
+    }
 
     private class SendStreamRunnable implements Runnable{
         int nodeID;
@@ -500,7 +550,7 @@ public class ConnectionThread extends Thread{
 
 
     public void cancel(){
-        stopHeartBeat();
+//        stopHeartBeat();
 
         StreamData = false;
         threadIsAlive = false;

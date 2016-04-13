@@ -609,15 +609,15 @@ public class MainActivity extends AppCompatActivity implements
             broadcast_client.start();
         }
 
-        if(bluetoothThread == null && (DEVICE_ID == sender || DEVICE_ID == proxy)) {
-//            debug("Initializing adhoc server thread");
-            BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(command_center_bt_adresses[DEVICE_ID-1]);
-            bluetoothThread = new BluetoothThread(device);
-            bluetoothThread.start();
-        }
+//        if(bluetoothThread == null && (DEVICE_ID == sender || DEVICE_ID == proxy)) {
+////            debug("Initializing adhoc server thread");
+//            BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(command_center_bt_adresses[DEVICE_ID-1]);
+//            bluetoothThread = new BluetoothThread(device);
+//            bluetoothThread.start();
+//        }
 
-//        commandsThread = new CommandsThread();
-//        commandsThread.start();
+        commandsThread = new CommandsThread();
+        commandsThread.start();
 
 
 //        if(DEVICE_ID == 7) {
@@ -633,12 +633,14 @@ public class MainActivity extends AppCompatActivity implements
     public void startCommunicationThreads(int nodeID, Socket socket,
                                           InputStream inputStream, OutputStream outputStream,
                                           MainActivity mainActivity){
-//        int socket_read_timeout = 500; //500 ms
-//        try {
-//            socket.setSoTimeout(socket_read_timeout);
-//        }catch (SocketException e) {
-//            e.printStackTrace();
-//        }
+        int socket_read_timeout = 2000; //500 ms
+        try {
+            socket.setSoTimeout(socket_read_timeout);
+            socket.setSoLinger(true, 0);
+            socket.setKeepAlive(false);
+        }catch (SocketException e) {
+            e.printStackTrace();
+        }
 
         ConnectionThread connectionThread = new ConnectionThread(inputStream, outputStream, nodeID,
                 mainActivity, socket, packetlogfile, logfile);
@@ -1346,7 +1348,8 @@ public class MainActivity extends AppCompatActivity implements
                     Log.d(TAG, "Server Thread");
                     Log.i(TAG, "Started: " + serverSocket.getLocalSocketAddress());
                     Socket client = serverSocket.accept();
-                    client.setKeepAlive(false);
+//                    client.setKeepAlive(false);
+//                    client.setSoLinger(true, 0);
                     Log.d(TAG, "Connected to: " + client.getInetAddress().getHostAddress());
                     Log.d(TAG, "Connected to Local Address: " + client.getLocalAddress().getHostAddress());
 
@@ -1390,54 +1393,54 @@ public class MainActivity extends AppCompatActivity implements
         //   debug("RX:"+received_bytes);
     }
 
-
-    public class WifiAdhocClientThread extends Thread {
-        String hostAddress;
-        DataInputStream inputStream;
-        DataOutputStream outputStream;
-        int device_Id;
-
-
-        public WifiAdhocClientThread(
-                String host) {
-//            mainActivity = activity;
-            hostAddress = host;
-        }
-
-        @Override
-        public void run() {
-            /**
-             * Listing 16-26: Creating a client Socket
-             */
-            int timeout = 500;
-            int port = 8000;
-
-            Socket socket = new Socket();
-            try {
-                device_Id = findDevice_IpAddress(hostAddress);
-                debug("Connecting to " + device_Id + " @ " + hostAddress);
-                socket.bind(null);
-                socket.connect((new InetSocketAddress(hostAddress, port)), 500);
-
-                debug("[CLIENT] Connected to "+device_Id+" "+hostAddress);
-
-                //      int size = 9999999;
-                //     socket.setReceiveBufferSize(size);
-                startCommunicationThreads(device_Id, socket,
-                        socket.getInputStream(), socket.getOutputStream(), mainActivity);
-
-//                otherConnection = new ConnectionThread(mainActivity, socket.getInputStream(),
-//                        socket.getOutputStream(), true, device_Id);
-//                otherConnection.start();
-//                addNode(otherConnection, device_Id);
-
-            } catch (IOException e) {
-                e.printStackTrace();
-                Log.e(TAG, e.getMessage());
-            }
-
-        }
-    }
+//
+//    public class WifiAdhocClientThread extends Thread {
+//        String hostAddress;
+//        DataInputStream inputStream;
+//        DataOutputStream outputStream;
+//        int device_Id;
+//
+//
+//        public WifiAdhocClientThread(
+//                String host) {
+////            mainActivity = activity;
+//            hostAddress = host;
+//        }
+//
+//        @Override
+//        public void run() {
+//            /**
+//             * Listing 16-26: Creating a client Socket
+//             */
+//            int timeout = 500;
+//            int port = 8000;
+//
+//            Socket socket = new Socket();
+//            try {
+//                device_Id = findDevice_IpAddress(hostAddress);
+//                debug("Connecting to " + device_Id + " @ " + hostAddress);
+//                socket.bind(null);
+//                socket.connect((new InetSocketAddress(hostAddress, port)), 500);
+//
+//                debug("[CLIENT] Connected to "+device_Id+" "+hostAddress);
+//
+//                //      int size = 9999999;
+//                //     socket.setReceiveBufferSize(size);
+//                startCommunicationThreads(device_Id, socket,
+//                        socket.getInputStream(), socket.getOutputStream(), mainActivity);
+//
+////                otherConnection = new ConnectionThread(mainActivity, socket.getInputStream(),
+////                        socket.getOutputStream(), true, device_Id);
+////                otherConnection.start();
+////                addNode(otherConnection, device_Id);
+//
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//                Log.e(TAG, e.getMessage());
+//            }
+//
+//        }
+//    }
 
 
     private class WifiBroadcast_server extends Thread{
@@ -1468,7 +1471,7 @@ public class MainActivity extends AppCompatActivity implements
                     broadcastSocket.send(packet);
                     //printConnectedNodes();
                     try {
-                        Thread.sleep(1000);
+                        Thread.sleep(500);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -1538,7 +1541,8 @@ public class MainActivity extends AppCompatActivity implements
                                         debug("Connecting to " + deviceID + " @ " + device_ip_adresses[deviceID - 1]);
                                         socket.bind(null);
                                         socket.connect((new InetSocketAddress(device_ip_adresses[deviceID - 1], port)), 600);
-                                        socket.setKeepAlive(false);
+//                                        socket.setKeepAlive(false);
+//                                        socket.setSoLinger(true, 0);
                                         debug("[CLIENT] Connected to " + deviceID + " " + device_ip_adresses[deviceID - 1]);
 
                                         //     int size = 9999999;
@@ -1558,8 +1562,8 @@ public class MainActivity extends AppCompatActivity implements
                                     }
                                 }
                             }
-//                            if(connectionThreads[deviceID - 1] != null)
-//                                connectionThreads[deviceID-1].lastSeenTimeStamp = System.currentTimeMillis();
+                            if(connectionThreads[deviceID - 1] != null)
+                                connectionThreads[deviceID-1].lastSeenTimeStamp = System.currentTimeMillis();
                         }
                     }else{
                         String command = stringScanner.next();
